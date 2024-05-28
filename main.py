@@ -99,6 +99,57 @@ def create_graph(sequences, k):
 
     return edges, in_degree, out_degree
 
+def create_graph_with_positive_error_handling(sequences, k):
+    from collections import defaultdict
+    import numpy as np  # Import numpy for average calculation
+
+    edges = defaultdict(list)
+    in_degree = defaultdict(int)
+    out_degree = defaultdict(int)
+
+    prefix_map = defaultdict(list)
+    for seq in sequences:
+        prefix = seq[:-1]
+        suffix = seq[1:]
+        prefix_map[prefix].append(seq)
+
+    # Initially connect sequences based on flexible overlaps
+    for seq in sequences:
+        prefix = seq[:-1]
+        suffix = seq[1:]
+        for possible_match in prefix_map:
+            if suffix[:k-2] == possible_match[1:k-1]:  # Allowing one mismatch or indel
+                for target_seq in prefix_map[possible_match]:
+                    if target_seq != seq:
+                        edges[seq].append(target_seq)
+                        out_degree[seq] += 1
+                        in_degree[target_seq] += 1
+
+    # Filter out sequences with connectivity lower than a threshold
+    average_in_degree = np.mean(list(in_degree.values()))
+    average_out_degree = np.mean(list(out_degree.values()))
+
+    # Define thresholds as half of average (tweak based on dataset specifics)
+    in_degree_threshold = average_in_degree / 2
+    out_degree_threshold = average_out_degree / 2
+
+    # Create new filtered graph structures
+    filtered_edges = defaultdict(list)
+    filtered_in_degree = defaultdict(int)
+    filtered_out_degree = defaultdict(int)
+
+    # Only include nodes that meet the degree threshold
+    for seq in sequences:
+        if in_degree[seq] >= in_degree_threshold and out_degree[seq] >= out_degree_threshold:
+            for target_seq in edges[seq]:
+                if in_degree[target_seq] >= in_degree_threshold and out_degree[target_seq] >= out_degree_threshold:
+                    filtered_edges[seq].append(target_seq)
+                    filtered_out_degree[seq] += 1
+                    filtered_in_degree[target_seq] += 1
+
+    return filtered_edges, filtered_in_degree, filtered_out_degree
+
+
 def print_graph_details(graph, in_degree, out_degree):
     multi_in = {k: v for k, v in in_degree.items() if v > 1}
     multi_out = {k: v for k, v in out_degree.items() if v > 1}
@@ -170,14 +221,14 @@ def concatenate_dna_path(path, k):
 
 
 def main():
-    file_path = "random_negative/9.200-40"
+    file_path = "random_positive/9.200+80"
     sequences = load_sequences_from_file(file_path)
     file_info = parse_filename(file_path)
 
     #print("Loaded sequences:", sequences)
     print("File info:", file_info)
     k = file_info['length'] - 6 # Changing this parameter allows for the biggest chain length gains
-    graph, in_degree, out_degree = create_graph(sequences, k)
+    graph, in_degree, out_degree = create_graph_with_positive_error_handling(sequences, k)
     print_graph_details(graph,in_degree,out_degree)
     #print_dict(graph)
     print('<><><><>')
